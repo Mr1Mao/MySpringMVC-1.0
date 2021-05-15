@@ -12,13 +12,14 @@ import java.util.List;
  */
 @MService
 public class UserService {
-
-    public String queryUserPassword(String username){
-        //模拟数据库查找的消息
-        List<User> userList = new ArrayList<>();
+    //模拟数据库查找的消息
+    public static List<User> userList = new ArrayList<>();
+    static{
         userList.add(new User("Mao","123456"));
         userList.add(new User("zhangsan","654321"));
         userList.add(new User("lisi","147852"));
+    }
+    public String queryUserPassword(String username){
         String res = "the user does not exist";
         for (User user : userList) {
             if(user.getUsername().equals(username)){
@@ -26,6 +27,21 @@ public class UserService {
             }
         }
         return res;
+    }
+
+    /**
+     * 查询 用户信息
+     * @param username
+     * @return
+     */
+    public User queryUser(String username){
+        User user = null;
+        for (User u : userList) {
+            if(u.getUsername().equals(username)){
+                user = u;
+            }
+        }
+        return user;
     }
 
 }

@@ -1,6 +1,7 @@
 package com.mao.springmvc.servlet;
 
 import com.mao.springmvc.annotations.*;
+import com.mao.springmvc.utils.Handler;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -16,6 +17,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @auth0r Mao
@@ -29,7 +32,9 @@ public class MDispatcherServlet extends HttpServlet {
     //用于存放 扫描到的组件路径
     private List<String> classNames = new ArrayList<>();
     //用户存放 controller 中对应 url的方法
-    private Map<String,Method> handlerMapping = new HashMap<>();
+//    private Map<String,Method> handlerMapping = new HashMap<>();
+    //用户村饭 Handler
+    private List<Handler> handlerMapping = new ArrayList<>();
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -70,59 +75,92 @@ public class MDispatcherServlet extends HttpServlet {
      * @param resp
      */
     private void doDispatch(HttpServletRequest req, HttpServletResponse resp) throws IOException, InvocationTargetException, IllegalAccessException {
-        //获取请求路径
-        String requestURI = req.getRequestURI();
-        String contextPath = req.getContextPath();
-        requestURI = requestURI.replaceAll(contextPath,"").replaceAll("/+","/");
-        //如果 请求的url 在 handlerMapping 中不存在则 放回404
-        if (!handlerMapping.containsKey(requestURI)) {
+        Handler handler = getHandler(req);
+        //放回的 handler为空则 放回404
+        if (handler == null) {
             resp.getWriter().write("404 not find");
         }
-        Method method = handlerMapping.get(requestURI);
+
+        Method method = handler.getMethod();
         //获取 controller中对应方法的 参数
         Class<?>[] parameterTypes = method.getParameterTypes();
         //获取请求中的 参数
         Map<String, String[]> parameterMap = req.getParameterMap();
 
-//       最终所需要传递给 方法的 参数集合
+        //最终所需要传递给 方法的 参数集合
         Object[] params= new Object[parameterTypes.length];
-        //遍历方法中的参数
-        for (int i = 0; i < parameterTypes.length; i++) {
-            Class parameterType = parameterTypes[i];
 
-            if(parameterType == HttpServletRequest.class){
-                //参数类型为 HttpServletRequest
+        for (Map.Entry<String,String[]> param:parameterMap.entrySet()) {
+            //parameterMap.get(paramName) 放回的为一个数组
+            String value = Arrays.toString(param.getValue())
+                    //将括号 删除
+                    .replaceAll("\\[|\\]","")
+                    .replaceAll("\\s",",");
+            //根据 请求中参数的名字查找 所在的参数在 方法的形参中所在的位置
+            Integer index = handler.getParamIndexMapping().get(param.getKey());
+            //将参数类型转换 保存给 params
+            params[index] = convert(parameterTypes[index],value);
+        }
+
+        for (int i = 0; i < parameterTypes.length; i++) {
+            //如果是HttpServletRequest类型 将req 传递过去
+            if(parameterTypes[i] == HttpServletRequest.class){
                 params[i] = req;
                 continue;
-            }else if(parameterType == HttpServletResponse.class){
-                //参数类型为 HttpServletResponse
+            }
+            //判断 HttpServletResponse
+            if (parameterTypes[i] == HttpServletResponse.class){
                 params[i] = resp;
                 continue;
-            }else if(parameterType == String.class){
-                //参数类型为 String
-                Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-                for (Annotation[] parameterAnnotation : parameterAnnotations) {
-                    for (Annotation annotation : parameterAnnotation) {
-
-                        if(annotation instanceof MRequestParam){
-                            String paramName = ((MRequestParam) annotation).value();
-                            if(!"".equals(paramName.trim())){
-                                //parameterMap.get(paramName) 放回的为一个数组
-                                String value = Arrays.toString(parameterMap.get(paramName))
-                                        //将括号 删除
-                                        .replaceAll("\\[|\\]","")
-                                        .replaceAll("\\s",",");
-                                params[i] = value;
-                            }
-                        }
-                    }
-                }
-
             }
         }
-        //通过 反射 method 找到class的类名
-        String beanName = toLowerFirstCase(method.getDeclaringClass().getSimpleName());
-        method.invoke(beanContext.get(beanName),params);
+        Object result = method.invoke(handler.getController(), params);
+        //根据返回值 返回参数
+        if(result == null || result instanceof Void){
+            return ;
+        }
+        resp.getWriter().write(result.toString());
+    }
+
+    /**
+     * 通过url中的正则 去匹配对应的handler
+     * @param req
+     * @return handler
+     */
+    public Handler getHandler(HttpServletRequest req){
+        if (handlerMapping.isEmpty()) return null;
+
+        //获取请求路径
+        String requestURI = req.getRequestURI();
+        String contextPath = req.getContextPath();
+        requestURI = requestURI.replaceAll(contextPath,"").replaceAll("/+","/");
+
+        for (Handler handler : handlerMapping) {
+            Matcher matcher = handler.getPattern().matcher(requestURI);
+            //如果没有匹配上 跳过
+            if(!matcher.matches()){
+                continue;
+            }
+
+            return handler;
+        }
+        return  null;
+    }
+
+    /**
+     * 请求中的参数默认为 String 将他转换为 controller中方法 对应参数的类型
+     * @param type
+     * @param value
+     * @return
+     */
+    private Object convert(Class type,String value){
+        if(type == Integer.class){
+            return Integer.valueOf(value);
+        }else if(type == Double.class){
+            return Double.valueOf(value);
+        }
+        //默认放回 String
+        return value;
     }
 
     /**
@@ -144,11 +182,11 @@ public class MDispatcherServlet extends HttpServlet {
                     if(!method.isAnnotationPresent(MRequestMapping.class))continue;
 
                     MRequestMapping annotation = method.getAnnotation(MRequestMapping.class);
-                    //获取方法上的path "/+"为正则表达式 如果有多个"/" 则转化为一个"/"
-                    String path = ("/" + basePath + "/" + annotation.value()).replaceAll("/+","/");
-
-                    //将该 方法 和 对应的 url 放入 handlerMapping 中
-                    handlerMapping.put(path,method);
+                    //获取方法上的path  "/+" 如果有多个"/" 则转化为一个"/"
+                    String regex = ("/" + basePath + "/" + annotation.value()).replaceAll("/+","/");
+                    Pattern pattern = Pattern.compile(regex);
+                    //存放在 handlerMapping中
+                    handlerMapping.add(new Handler(bean.getValue(),method,pattern));
                 }
             }else {
                 continue;

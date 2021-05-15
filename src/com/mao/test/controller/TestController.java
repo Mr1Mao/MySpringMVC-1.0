@@ -25,8 +25,8 @@ public class TestController {
     @MAutowired
     private UserService userService;
 
-    @MRequestMapping("/user")
-    public void getUser(HttpServletRequest request, HttpServletResponse response, @MRequestParam(value = "usr") String username){
+    @MRequestMapping("/password")
+    public void getPassword(HttpServletRequest request, HttpServletResponse response, @MRequestParam(value = "usr") String username){
         System.out.println(username);
         String userPassword = userService.queryUserPassword(username);
 
@@ -36,4 +36,13 @@ public class TestController {
             e.printStackTrace();
         }
     }
+
+    @MRequestMapping("/user")
+    public User getUser(@MRequestParam(value = "usr") String username){
+        System.out.println(username);
+        User user = userService.queryUser(username);
+        return user;
+    }
+
+
 }
