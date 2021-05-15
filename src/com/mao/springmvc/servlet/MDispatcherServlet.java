@@ -31,9 +31,7 @@ public class MDispatcherServlet extends HttpServlet {
     private Map<String,Object> beanContext= new HashMap<>();
     //用于存放 扫描到的组件路径
     private List<String> classNames = new ArrayList<>();
-    //用户存放 controller 中对应 url的方法
-//    private Map<String,Method> handlerMapping = new HashMap<>();
-    //用户村饭 Handler
+    //用于存放 Handler
     private List<Handler> handlerMapping = new ArrayList<>();
 
     @Override
