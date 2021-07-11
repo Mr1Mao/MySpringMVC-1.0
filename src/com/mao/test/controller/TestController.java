@@ -5,6 +5,7 @@ import com.mao.springmvc.annotations.MController;
 import com.mao.springmvc.annotations.MRequestMapping;
 import com.mao.springmvc.annotations.MRequestParam;
 import com.mao.test.entity.User;
+import com.mao.test.service.AdminService;
 import com.mao.test.service.UserService;
 import com.sun.deploy.net.HttpRequest;
 import com.sun.deploy.net.HttpResponse;
@@ -25,6 +26,9 @@ public class TestController {
     @MAutowired
     private UserService userService;
 
+    @MAutowired
+    private AdminService adminService;
+
     @MRequestMapping("/password")
     public void getPassword(HttpServletRequest request, HttpServletResponse response, @MRequestParam(value = "usr") String username){
         System.out.println(username);
@@ -42,6 +46,18 @@ public class TestController {
         System.out.println(username);
         User user = userService.queryUser(username);
         return user;
+    }
+
+    @MRequestMapping("/user2")
+    public User getUser(){
+
+        User user = userService.queryUser("Mao");
+        return user;
+    }
+
+    @MRequestMapping("/hello")
+    public String hello(){
+        return adminService.hello();
     }
 
 
